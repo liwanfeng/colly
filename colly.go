@@ -607,7 +607,10 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 	}
 
 	// 请求时生成代理地址
-	proxyURL, _ := c.Proxy(req)
+	proxyURL := new(url.URL)
+	if c.Proxy != nil {
+		proxyURL, _ = c.Proxy(req)
+	}
 
 	if proxyURL != nil {
 		request.ProxyURL = proxyURL.Host
@@ -916,6 +919,25 @@ func (c *Collector) SetProxy(proxyURL string) error {
 // "http" is assumed.
 func (c *Collector) SetProxyFunc(p ProxyFunc) {
 	c.Proxy = p
+
+	t, ok := c.backend.Client.Transport.(*http.Transport)
+	if c.backend.Client.Transport != nil && ok {
+		t.Proxy = OnRequestProxyFunc
+	} else {
+		c.backend.Client.Transport = &http.Transport{
+			Proxy: OnRequestProxyFunc,
+		}
+	}
+}
+
+// 从Request中绑定
+func OnRequestProxyFunc(request *http.Request) (*url.URL, error) {
+	proxy := request.Context().Value(ProxyURLKey)
+	if proxy != nil {
+		return url.Parse("http://" + proxy.(string))
+	} else {
+		return nil, nil
+	}
 }
 
 func createEvent(eventType string, requestID, collectorID uint32, kvargs map[string]string) *debug.Event {
