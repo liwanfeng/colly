@@ -46,8 +46,8 @@ import (
 	"github.com/kennygrant/sanitize"
 	"github.com/temoto/robotstxt"
 
-	"github.com/gocolly/colly/debug"
-	"github.com/gocolly/colly/storage"
+	"github.com/liwanfeng/colly/debug"
+	"github.com/liwanfeng/colly/storage"
 )
 
 // Collector provides the scraper instance for a scraping job
@@ -119,6 +119,7 @@ type Collector struct {
 	backend           *httpBackend
 	wg                *sync.WaitGroup
 	lock              *sync.RWMutex
+	Proxy             ProxyFunc
 }
 
 // RequestCallback is a type alias for OnRequest callback functions
@@ -366,7 +367,7 @@ func Debugger(d debug.Debugger) func(*Collector) {
 // Init initializes the Collector's private variables and sets default
 // configuration for the Collector
 func (c *Collector) Init() {
-	c.UserAgent = "colly - https://github.com/gocolly/colly"
+	c.UserAgent = "colly - https://github.com/liwanfeng/colly"
 	c.MaxDepth = 0
 	c.store = &storage.InMemoryStorage{}
 	c.store.Init()
@@ -605,11 +606,16 @@ func (c *Collector) fetch(u, method string, depth int, requestData io.Reader, ct
 		req.Header.Set("Accept", "*/*")
 	}
 
+	// 请求时生成代理地址
+	proxyURL, _ := c.Proxy(req)
+
+	if proxyURL != nil {
+		request.ProxyURL = proxyURL.Host
+	}
+
 	origURL := req.URL
 	response, err := c.backend.Cache(req, c.MaxBodySize, c.CacheDir)
-	if proxyURL, ok := req.Context().Value(ProxyURLKey).(string); ok {
-		request.ProxyURL = proxyURL
-	}
+
 	if err := c.handleOnError(response, err, request, ctx); err != nil {
 		return err
 	}
@@ -909,14 +915,7 @@ func (c *Collector) SetProxy(proxyURL string) error {
 // and "socks5" are supported. If the scheme is empty,
 // "http" is assumed.
 func (c *Collector) SetProxyFunc(p ProxyFunc) {
-	t, ok := c.backend.Client.Transport.(*http.Transport)
-	if c.backend.Client.Transport != nil && ok {
-		t.Proxy = p
-	} else {
-		c.backend.Client.Transport = &http.Transport{
-			Proxy: p,
-		}
-	}
+	c.Proxy = p
 }
 
 func createEvent(eventType string, requestID, collectorID uint32, kvargs map[string]string) *debug.Event {
