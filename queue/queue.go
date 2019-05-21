@@ -161,11 +161,38 @@ func (q *Queue) Run(c *colly.Collector) error {
 func (q *Queue) finish() {
 	q.lock.Lock()
 	q.activeThreadCount--
-	for _, c := range q.threadChans {
-		c <- stop
+	// Finish all task together
+	if q.activeThreadCount == 0 {
+		for _, c := range q.threadChans {
+			c <- stop
+		}
 	}
 	q.threadChans = make([]chan bool, 0, q.Threads)
 	q.lock.Unlock()
+}
+
+func (q *Queue) ActiveThread() bool {
+	// All thread is running
+	if int32(q.Threads) == q.activeThreadCount {
+		return true
+	}
+
+	if q.activeThreadCount > 0 {
+		// Active all of the hold thread when the queue size more than zero
+		if s, _ := q.Size(); s > 0 {
+			q.lock.Lock()
+			for _, c := range q.threadChans {
+				c <- !stop
+			}
+			q.threadChans = make([]chan bool, 0, q.Threads)
+			q.lock.Unlock()
+		}
+
+		return true
+	}
+
+	// Any thread is running be active
+	return false
 }
 
 // Init implements Storage.Init() function
