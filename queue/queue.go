@@ -161,11 +161,8 @@ func (q *Queue) Run(c *colly.Collector) error {
 func (q *Queue) finish() {
 	q.lock.Lock()
 	q.activeThreadCount--
-	// Finish all task together
-	if q.activeThreadCount == 0 {
-		for _, c := range q.threadChans {
-			c <- stop
-		}
+	for _, c := range q.threadChans {
+		c <- stop
 	}
 	q.threadChans = make([]chan bool, 0, q.Threads)
 	q.lock.Unlock()
